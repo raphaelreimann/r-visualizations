@@ -1,0 +1,142 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+netflix_data <- read_csv("netflix-rotten-tomatoes-metacritic-imdb.csv")
+```
+```{r}
+netflix_data <- netflix_data %>%
+  rename(
+    Tag = Tags,
+    Series_or_Movie = `Series or Movie`,
+    Hidden_Gem_Score = `Hidden Gem Score`,
+    Country_Availability = `Country Availability`,
+    View_Rating = `View Rating`,
+    IMDb_Score = `IMDb Score`,
+    Rotten_Tomatoes_Score = `Rotten Tomatoes Score`,
+    Metacritic_Score = `Metacritic Score`,
+    Awards_Received = `Awards Received`,
+    Awards_Nominated = `Awards Nominated For`,
+    Release_Date = `Release Date`,
+    Netflix_Release_Date = `Netflix Release Date`,
+    Production_House = `Production House`,
+    Netflix_Link = `Netflix Link`,
+    IMDb_Votes = `IMDb Votes`,
+    TMDb_Trailer = `TMDb Trailer`,
+    Trailer_Site = `Trailer Site`
+  )
+```
+
+
+```{r}
+netflix_data_cleaned <- read_csv("netflix-rotten-tomatoes-metacritic-imdb.csv")
+netflix_data_cleaned$Genre <- str_split(netflix_data$Genre, ", ")
+netflix_data_cleaned$Tags <- str_split(netflix_data$Tags, ",")
+netflix_data_cleaned$Languages <- str_split(netflix_data$Languages, ", ")
+netflix_data_cleaned$`Country Availability` <- str_split(netflix_data$`Country Availability`, ",")
+netflix_data_cleaned$Director <- str_split(netflix_data$Director, ", ")
+netflix_data_cleaned$Writer <- str_split(netflix_data$Writer, ", ")
+netflix_data_cleaned$Actors <- str_split(netflix_data$Actors, ", ")
+netflix_data_cleaned$`Production House` <- str_split(netflix_data$`Production House`, ", ")
+```
+
+```{r}
+netflix_data_cleaned %>%
+  filter("Short" %in% Genre)
+```
+```{r}
+netflix_data$Image[5]
+```
+
+```{r}
+library(tidyr)
+netflix_genre <- unique(separate_rows(as.data.frame(netflix_data$Genre), "netflix_data$Genre", sep = ", ", convert = TRUE))
+netflix_tags <- unique(separate_rows(as.data.frame(netflix_data$Tag), "netflix_data$Tag", sep = ",", convert = TRUE))
+netflix_languages <- unique(separate_rows(as.data.frame(netflix_data$Languages), "netflix_data$Languages", sep = ", ", convert = TRUE))
+netflix_country_availability <- unique(separate_rows(as.data.frame(netflix_data$Country_Availability), "netflix_data$Country_Availability", sep = ",", convert = TRUE))
+netflix_director <- unique(separate_rows(as.data.frame(netflix_data$Director), "netflix_data$Director", sep = ", ", convert = TRUE))
+netflix_writer <- unique(separate_rows(as.data.frame(netflix_data$Writer), "netflix_data$Writer", sep = ", ", convert = TRUE))
+netflix_actors <- unique(separate_rows(as.data.frame(netflix_data$Actors), "netflix_data$Actors", sep = ", ", convert = TRUE))
+netflix_production_house <- unique(separate_rows(as.data.frame(netflix_data$Production_House), "netflix_data$Production_House", sep = ", ", convert = TRUE))
+names(netflix_genre) <- "Genre"
+names(netflix_tags) <- "Tag"
+names(netflix_languages) <- "Language"
+names(netflix_country_availability) <- "Country"
+names(netflix_director) <- "Director"
+names(netflix_writer) <- "Writer"
+names(netflix_actors) <- "Actor"
+names(netflix_production_house) <- "Production_House"
+```
+
+```{r}
+netflix_data %>%
+  filter(grepl(head(netflix_actors, n = 1), Actors))
+```
+
+```{r}
+airbnb_data <- read.csv("airbnb-listings.csv", sep = ';', encoding = "UTF-8")
+
+library(plotly)
+fig <- airbnb_data
+fig <- fig %>%
+  plot_ly(
+    lat = ~Latitude,
+    lon = ~Longitude,
+    type = 'scattermapbox'
+  )
+fig <- fig %>%
+  layout(
+    mapbox = list(
+      style = 'open-street-map',
+      zoom = 4
+    )
+  )
+fig
+```
+
+
+```{r}
+airbnb_data$Listing.Url[1]
+airbnb_data %>%
+  select("Name", "Host.Name", "Neighbourhood.Cleansed")
+```
+```{r}
+airbnb_data %>%
+  select("Host.ID":"Host.Verifications") %>%
+  filter(Host.Name == "Maria") %>%
+  arrange(Host.Response.Rate)
+```
+```{r}
+airbnb_data %>%
+  group_by(Neighbourhood.Cleansed) %>%
+  summarise(
+    n = n(),
+    Price = mean(Price),
+    Review.Scores.Rating = mean(Review.Scores.Rating)
+  )
+```
+```{r}
+airbnb_data %>%
+  group_by(Neighbourhood.Group.Cleansed) %>%
+  summarise(
+    #n = n(),
+    #Price = mean(Price),
+    #Review.Scores.Rating = mean(Review.Scores.Rating)
+    funs(mean(!is.na(.)))
+  )
+
+airbnb_data %>%
+  group_by(Neighbourhood.Group.Cleansed) %>%
+  summarise(across(everything(), list(mean = mean)))
+
+airbnb_data %>%
+  filter(across(c(Beds, Country), ~ !is.na(.)))
+```
+
+
+
+
+
+
+

@@ -1,0 +1,145 @@
+---
+title: "Covid-19 Vaccination Data Visualization"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+```{r}
+library(tidyverse)
+library(plotly)
+library(gganimate)
+library(gifski)
+```
+
+# Load data
+The data on COVID-19 vaccination and deaths is sourced from [Our World in Data](https://ourworldindata.org/coronavirus). 
+```{r echo=TRUE}
+data <- read.csv("./owid-covid-data.csv")
+data <- read.csv("https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv")
+```
+
+
+# Prepare data
+Select only needed columns, use only countries (not continents or worldwide numbers), use only data where deaths per million and total vaccination data is available at any given day. 
+```{r echo=TRUE}
+data_cleaned <- data %>%
+  select(iso_code:date, total_deaths_per_million, total_vaccinations_per_hundred, population) %>%
+  mutate(total_deaths_per_hundred_thousand=total_deaths_per_million/10) %>%
+  mutate(casted_date=as.Date(date)) %>%
+  
+  # Continents and World data are not used (e.g. OWID_AFR)
+  filter(!grepl("OWID_", iso_code)) %>%
+  filter(!is.na(total_deaths_per_million) & !is.na(total_vaccinations_per_hundred))
+```
+
+# Advanced and emerging economies
+The classification of advanced and emerging economies is based on the IMF World Economic Outlook (https://www.imf.org/external/pubs/ft/weo/2020/02/weodata/groups.htm).
+```{r echo=TRUE}
+advanced_economies <- c("Australia", "Austria", "Belgium", "Canada", "Cyprus", "Czechia", "Denmark", "Estonia", "Finland", "France", "Germany", "Greece", "Hong Kong SAR", "Iceland", "Ireland", "Israel", "Italy", "Japan", "Latvia", "Lithuania", "Luxembourg", "Macao SAR", "Malta", "Netherlands", "New Zealand", "Norway", "Portugal", "Puerto Rico", "San Marino", "Singapore", "Slovak Republic", "Slovenia","South Korea", "Spain", "Sweden", "Switzerland", "Taiwan", "United Kingdom", "United States")
+```
+
+For every location determine if the economy is advanced or emerging.
+```{r echo=TRUE}
+data_cleaned <- data_cleaned %>%
+  mutate(advanced_economy = ifelse(location %in% advanced_economies, "advanced", "emerging"))
+```
+
+
+# Plot data
+
+## Static Plot
+To render the visualization for a single day, change the date that is assigned to the `day` variable.
+```{r echo=TRUE}
+day <- c("2021-05-07")
+data_cleaned_single <- data_cleaned %>%
+  filter(date == day)
+
+p <- ggplot(data=data_cleaned_single, 
+            mapping = aes(x=total_vaccinations_per_hundred, 
+                          y=total_deaths_per_hundred_thousand, 
+                          size=population, 
+                          color=factor(advanced_economy))) +
+    geom_point(alpha=0.75) +
+    geom_text(aes(label = location), 
+              size=2.5, 
+              check_overlap = TRUE, 
+              nudge_y = 13, 
+              show.legend = FALSE) +
+    guides(size = FALSE, 
+           color = guide_legend(title = "", override.aes = list(size = 5))) +
+    scale_x_continuous(name="Doses per 100 residents", 
+                       breaks=seq(0,135,10)) +
+    scale_y_continuous(name="Deaths per 100k", 
+                       breaks=seq(0,300,20)) +
+    # Bubble size
+    scale_size(range = c(.1, 24), 
+               name="Population (M)") +
+    scale_color_manual(values = c(advanced = "#0f5499", emerging = "#eb5e8d"), 
+                       labels = c("Advanced economies", "Emerging and developing economies")) +
+    labs(title="Advanced economies are ahead on vaccinations", 
+         subtitle="Progress on vaccinations vs. death toll, circle size represents population",
+         caption = paste("Date: ", day, sep = "")) +
+    theme_classic() +
+    theme(plot.background = element_rect(fill = "#fff1e5"),
+          panel.background = element_rect(fill = "#fff1e5"),
+          legend.position = "top", 
+          legend.justification = "left",
+          legend.background = element_blank(),
+          axis.ticks.length = unit(8, "pt"),
+          text = element_text(color="#000000"),
+          plot.subtitle = element_text(color="#746e69"),
+          axis.title = element_text(color="#746e69")) 
+p
+```
+
+## Dynamic Plot
+We now want to visualize the number of vaccinations and deaths dynamically. This code chunk returns a Gif animation. 
+```{r}
+library(gganimate)
+
+ggplot(data=data_cleaned, 
+            mapping = aes(x=total_vaccinations_per_hundred, 
+                          y=total_deaths_per_hundred_thousand, 
+                          size=population, 
+                          color=factor(advanced_economy))) +
+    geom_point(alpha=0.75) +
+    geom_text(aes(label = location), 
+              size=2.5, 
+              check_overlap = TRUE, 
+              nudge_y = 13, 
+              show.legend = FALSE) +
+    guides(size = FALSE, 
+           color = guide_legend(title = "", override.aes = list(size = 5))) +
+    scale_x_continuous(name="Doses per 100 residents", 
+                       breaks=seq(0,135,10)) +
+    scale_y_continuous(name="Deaths per 100k", 
+                       breaks=seq(0,300,20)) +
+    # Bubble size
+    scale_size(range = c(.1, 24), 
+               name="Population (M)") +
+    scale_color_manual(values = c(advanced = "#0f5499", emerging = "#eb5e8d"), 
+                       labels = c("Advanced economies", "Emerging and developing economies")) +
+    labs(title="Advanced economies are ahead on vaccinations", 
+         subtitle="Progress on vaccinations vs. death toll, circle size represents population",
+         caption = "Date: {frame_time}") +
+    theme_classic() +
+    theme(plot.background = element_rect(fill = "#fff1e5"),
+          panel.background = element_rect(fill = "#fff1e5"),
+          legend.position = "top", 
+          legend.justification = "left",
+          legend.background = element_blank(),
+          axis.ticks.length = unit(8, "pt"),
+          text = element_text(color="#000000"),
+          plot.subtitle = element_text(color="#746e69"),
+          axis.title = element_text(color="#746e69")) +
+    transition_time(casted_date) +
+    ease_aes("linear")
+
+#animate(plot=p, renderer=ffmep_renderer())
+```
+
+
+

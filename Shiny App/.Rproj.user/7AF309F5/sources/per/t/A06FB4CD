@@ -1,0 +1,28 @@
+{
+    "id": "A06FB4CD",
+    "path": "~/Dev/R Visualization/Shiny App/EDA.Rmd",
+    "project_path": "EDA.Rmd",
+    "type": "r_markdown",
+    "hash": "2733456650",
+    "contents": "",
+    "dirty": false,
+    "created": 1625584091167.0,
+    "source_on_save": false,
+    "relative_order": 4,
+    "properties": {
+        "tempName": "Untitled1",
+        "chunk_output_type": "inline",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "126,3",
+        "scrollLine": "83"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1626722846,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1626722846056,
+    "read_only": false,
+    "read_only_alternatives": []
+}

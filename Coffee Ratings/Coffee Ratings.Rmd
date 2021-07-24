@@ -1,0 +1,234 @@
+---
+title: "Coffee Ratings"
+output: html_notebook
+author: "Raphael Reimann"
+---
+# Setting up the project
+```{r}
+library(tidyverse)
+library(plotly)
+library(crosstalk) # needed for brushing in plotly objects
+library(countrycode) # iso code of country names
+library(lubridate) # clean dates
+```
+
+# Data Loading and Cleaning
+The data is taken from the Coffee Quality Database and provided by RforDataScience. The cleaning script that is used is also provided at the [Github Repository](https://github.com/rfordatascience/tidytuesday/tree/master/data/2020/2020-07-07).
+```{r}
+raw_arabica <- read_csv("https://raw.githubusercontent.com/jldbc/coffee-quality-database/master/data/arabica_data_cleaned.csv") %>% 
+  janitor::clean_names()
+
+raw_robusta <- read_csv("https://raw.githubusercontent.com/jldbc/coffee-quality-database/master/data/robusta_data_cleaned.csv",
+                        col_types = cols(
+                          X1 = col_double(),
+                          Species = col_character(),
+                          Owner = col_character(),
+                          Country.of.Origin = col_character(),
+                          Farm.Name = col_character(),
+                          Lot.Number = col_character(),
+                          Mill = col_character(),
+                          ICO.Number = col_character(),
+                          Company = col_character(),
+                          Altitude = col_character(),
+                          Region = col_character(),
+                          Producer = col_character(),
+                          Number.of.Bags = col_double(),
+                          Bag.Weight = col_character(),
+                          In.Country.Partner = col_character(),
+                          Harvest.Year = col_character(),
+                          Grading.Date = col_character(),
+                          Owner.1 = col_character(),
+                          Variety = col_character(),
+                          Processing.Method = col_character(),
+                          Fragrance...Aroma = col_double(),
+                          Flavor = col_double(),
+                          Aftertaste = col_double(),
+                          Salt...Acid = col_double(),
+                          Balance = col_double(),
+                          Uniform.Cup = col_double(),
+                          Clean.Cup = col_double(),
+                          Bitter...Sweet = col_double(),
+                          Cupper.Points = col_double(),
+                          Total.Cup.Points = col_double(),
+                          Moisture = col_double(),
+                          Category.One.Defects = col_double(),
+                          Quakers = col_double(),
+                          Color = col_character(),
+                          Category.Two.Defects = col_double(),
+                          Expiration = col_character(),
+                          Certification.Body = col_character(),
+                          Certification.Address = col_character(),
+                          Certification.Contact = col_character(),
+                          unit_of_measurement = col_character(),
+                          altitude_low_meters = col_double(),
+                          altitude_high_meters = col_double(),
+                          altitude_mean_meters = col_double()
+                        )) %>% 
+  janitor::clean_names() %>% 
+  rename(acidity = salt_acid, sweetness = bitter_sweet,
+         aroma = fragrance_aroma, body = mouthfeel,uniformity = uniform_cup)
+
+
+all_ratings <- bind_rows(raw_arabica, raw_robusta) %>% 
+  select(-x1) %>% 
+  select(total_cup_points, species, everything()) # combine arabica and robusta reviews
+
+all_ratings$country_of_origin[all_ratings$country_of_origin == "United States (Puerto Rico)"] <- "Puerto Rico" # fix country so that iso code is generated correctly
+
+all_ratings$country_of_origin[all_ratings$owner == "racafe & cia s.c.a"] <- "Colombia" # missing country was determined by google search of the producer
+
+all_ratings_iso <- all_ratings %>%
+  mutate(iso_code = countrycode(country_of_origin, origin = 'country.name', destination = 'iso3c')) # add iso code of every country
+
+all_ratings_iso <- all_ratings_iso %>%
+  mutate(grading_date_cleaned = mdy(grading_date)) # clean dates
+
+all_ratings_iso %>% 
+  skimr::skim()
+```
+When skimming the data we observe which variables have a lot of missing values and which do not. We can use a lot of numerical data on the quality of coffee as well as timeseries data and data on the country of origin of a given review.
+
+# Data Exploration
+The graph below shows that the ratings per producing country are not evenly distributed across countries. When we compare differences between countries we should be aware that for some countries there are only very few ratings that might not be representative of the coffee industry in that country.
+```{r}
+ratings_counted <- all_ratings_iso %>% 
+  count(iso_code, sort = TRUE)
+```
+
+```{r}
+fig <- plot_ly(data = ratings_counted, x = ~iso_code, y = ~n) %>%
+  layout(xaxis = list(title = "Country"), yaxis = list(title = "# of Reviews"))
+fig
+```
+
+# Data Visualization
+We want to visualize trends as well as differences among countries regarding their coffee bean production. Although the dataset provides a variety of different key figures to rank coffee beans, the `Total Cup Points` value aggregates the quality of the coffee bean into a single value. We plot the Total Cup Points over time and connect the Figure to a World Map to uncover patterns and regional differences across countries. 
+
+The following cell produces a scatterplot which plots the Total Cup Score within the timeframe between 2010 and 2018. Individual Coffee Bean Ratings are displayed and detailed Information on the Country of Origin, Date of Grading, Number of Bags of Coffee Beans, and Number of Category One Defects are available on hover.
+```{r}
+shared_data <- all_ratings_iso %>%
+  crosstalk::SharedData$new(key = ~iso_code) # make the dataframe sharable between plots to enable brushing
+```
+
+```{r}
+scatter <- shared_data %>%
+  plot_ly(height = 200) %>%
+  add_markers(
+    x = ~grading_date_cleaned, 
+    y = ~total_cup_points, 
+    color = ~number_of_bags, 
+    size = ~category_one_defects, 
+    text = ~paste("Country: ", country_of_origin,
+                  "<br>Date: ", grading_date_cleaned,
+                  "<br>Total Cup Points: ", total_cup_points,
+                  "<br>Number of Bags: ", number_of_bags,
+                  "<br>Number of Category One Defects: ", category_one_defects)) %>%
+  colorbar(title = "Number of Bags", limits = c(0, 400), len = 1.2) %>%
+  layout(
+    title = "Coffee Ratings over Time",
+    xaxis = list(
+      range = c(as.Date("2010-01-01"), as.Date("2018-02-28")), # scatterplot should only display timescale where we have data
+      title = "Grading Date"
+    ),
+    yaxis = list(
+      title = "Total Cup Points"
+    )
+  )
+```
+
+Now we declare the World Map Plot that aggregates the individual rating values like aroma, flavor, aftertaste, acidity, body, balance, uniformity, sweetness, cupper points, and the mean altitude of the coffee bean farm in meters as averages for individual countries. 
+```{r}
+geojson_url = 'https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson' # we use a geojson file as the base for our world map
+```
+
+```{r}
+map <- shared_data %>%
+  plot_mapbox(height = 500) %>%
+  group_by(country_of_origin) %>%
+  summarize(mean_total_cup_points = round(mean(total_cup_points), digits = 2),
+            mean_aroma = round(mean(aroma), 2),
+            mean_flavor = round(mean(flavor), 2),
+            mean_aftertaste = round(mean(aftertaste), 2),
+            mean_acidity = round(mean(acidity), 2),
+            mean_body = round(mean(body), 2),
+            mean_balance = round(mean(balance), 2),
+            mean_uniformity = round(mean(uniformity), 2),
+            mean_sweetness = round(mean(sweetness), 2),
+            mean_cupper_points = round(mean(cupper_points), 2),
+            mean_altitude_mean_meters = round(mean(altitude_mean_meters), 2),
+            number_reviews = n(),
+            iso_code = iso_code) %>%
+  add_trace(
+    type = "choroplethmapbox",
+    name = "Coffee Ratings",
+    geojson = geojson_url,
+    featureidkey = "properties.ISO_A3", # check the country iso code in geojson file
+    locations = ~iso_code, 
+    z = ~mean_total_cup_points,
+    text = ~paste("Country: ", country_of_origin,
+                  "<br>Average Total Cup Points: ", mean_total_cup_points,
+                  "<br>Number of reviews: ", number_reviews),
+    colorscale = "Viridis"
+    ) %>%
+  colorbar(title = "") %>%
+  layout(
+      updatemenus = list( # dropdown menu to toggle between quality criteria
+        list(
+          x = .95,
+          buttons = list(
+            list(method = "restyle",
+                 args = list("z", list(~mean_total_cup_points)),
+                 label = "Total Cup Points"),
+            list(method = "restyle",
+                 args = list("z", list(~mean_aroma)),
+                 label = "Aroma"),
+            list(method = "restyle",
+                 args = list("z", list(~mean_flavor)),
+                 label = "Flavor"),
+            list(method = "restyle",
+                 args = list("z", list(~mean_aftertaste)),
+                 label = "Aftertaste"),
+            list(method = "restyle",
+                 args = list("z", list(~mean_acidity)),
+                 label = "Acidity"),
+            list(method = "restyle",
+                 args = list("z", list(~mean_body)),
+                 label = "Body"),
+            list(method = "restyle",
+                 args = list("z", list(~mean_balance)),
+                 label = "Balance"),
+            list(method = "restyle",
+                 args = list("z", list(~mean_uniformity)),
+                 label = "Uniformity"),
+            list(method = "restyle",
+                 args = list("z", list(~mean_sweetness)),
+                 label = "Sweetness"),
+            list(method = "restyle",
+                 args = list("z", list(~mean_cupper_points)),
+                 label = "Cupper Points"),
+            list(method = "restyle",
+                 args = list("z", list(~mean_altitude_mean_meters)),
+                 label = "Mean Altitude (m)")
+          )
+        )
+      )
+     ) %>%
+  highlight(selected = attrs_selected(opacity = 0.5)) # highlight selected countries
+```
+We now display the scatterplot and the world map together. The two plots are connected through brushing, which means that a high level overview can be obtained when browsing the world map. To change to individual quality rating, the dropdown menu can be used. By clicking on a country for which data is available, the scatterplot will highlight the corresponding individual coffee bean reviews of that country. The world map allows for a general overview and filtering of quality criteria and gives detailed review information on demand. 
+```{r}
+bscols(scatter, map, widths = c(.3, .7)) %>% 
+  highlight(on = "plotly_selected")
+```
+
+# Analysis
+We want to highlight a few key findings of this data visualization. The general overview of the world map shows us that the reviews in our dataset are mostly form Central and South America, Central Africa and Central and South East Asia. We can conclude that coffee beans are mostly grown in the tropical climate zone and we can hypothesize that this climate zone is benefitial for growing coffee beans. One can also note that labour wages in those regions are lower on average compared to regions such as Europe and North America which might be another explanation for coffee beans mostly being grown in low-wage countries.
+
+When comparing quality criteria of the coffee beans we note that Papua New Guinea and Ethiopia have received the overall top scores for their coffee beans, although it has to be pointed out that Papua New Guinea only has a single review which is not representative for the whole country.
+
+For most quality criteria such as aroma, flavor, aftertaste, balance etc. Ethiopia produces on average the best coffee. Coffee beans from Central America are generally on the low end of quality scale. We can note that coffee produced in India is generally less sweet than from anywhere else. 
+
+When we are looking at the detailed ratings for individual countries we can also find interesting anomalies. While ratings for Mexican coffee beans are spread out across the timescale 2010-2018, we see that in the second half of 2012 there have been a lot of reviews. It might be interesting to find out why Mexican coffee has been reviewed that much in that time period. The majority of Ethiopias great rating is the result of a cluster outstanding reviews in March and April of 2015. It might be interesting to investigate if weather conditions or other factors have led to this. We also see that the worst coffee ratings in our dataset (disregarding a 0 Total Cup Point Review of coffee from Honduras in 2017) are a 59.83 rating from coffee from Guatemala from 2012 and a 63.08 rating from coffee from Nicaragua from 2017. 
+
+
+
